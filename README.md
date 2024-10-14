@@ -1,96 +1,73 @@
-# Obsidian Sample Plugin
+# Obsidian Git Sync 插件
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+这是一个为Obsidian设计的Git同步插件,可以帮助您轻松地将Obsidian笔记与Git仓库同步。
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+## 功能
 
-**Note:** The Obsidian API is still in early alpha and is subject to change at any time!
+- 自动检测本地和远程的更改
+- 一键同步本地更改到Git仓库
+- 从Git仓库拉取最新更新
+- 可自定义同步按钮位置
+- 提供详细的同步状态提示
+- 支持定期自动同步
+- 支持失去焦点时同步
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+## 安装
 
-## First time developing plugins?
+1. 打开Obsidian设置
+2. 进入"第三方插件"
+3. 禁用"安全模式"
+4. 点击"浏览社区插件"
+5. 搜索"Git Sync"
+6. 点击安装
+7. 启用插件
 
-Quick starting guide for new plugin devs:
+## 使用方法
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+1. 安装并启用插件后,进入插件设置
+2. 设置Git仓库的本地路径
+3. 选择同步按钮的显示位置(左侧功能区或状态栏)
+4. 点击同步按钮或使用命令面板执行"执行Git同步"命令来同步您的笔记
 
-## Releasing new releases
+## 设置选项
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+- **Git仓库路径**: 设置您的Obsidian仓库对应的本地Git仓库路径
+- **同步按钮位置**: 选择将同步按钮放置在左侧功能区还是状态栏
+- **启用自动同步**: 开启或关闭定期自动同步功能
+- **自动同步间隔**: 设置自动同步的时间间隔（分钟）
+- **失去焦点时同步**: 当Obsidian窗口失去焦点时执行同步
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+## 注意事项
 
-## Adding your plugin to the community plugin list
+- 请确保您的系统已安装Git
+- 首次使用时,请确保已正确配置Git仓库
+- 如果遇到权限问题,可能需要配置SSH密钥或使用个人访问令牌
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+## 常见问题
 
-## How to use
+Q: 为什么同步失败?
+A: 请检查Git仓库路径是否正确,以及是否有足够的权限访问仓库。
 
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+Q: 插件会自动同步吗?
+A: 默认情况下不会,但您可以在设置中启用"启用自动同步"选项并设置同步间隔。您还可以选择在Obsidian窗口失去焦点时进行同步。
 
-## Manually installing the plugin
+## 自动同步
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+本插件提供了灵活的自动同步功能,您可以根据个人需求选择启用或禁用以下选项:
 
-## Improve code quality with eslint (optional)
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- To use eslint with this project, make sure to install eslint from terminal:
-  - `npm install -g eslint`
-- To use eslint to analyze this project use this command:
-  - `eslint main.ts`
-  - eslint will then create a report with suggestions for code improvement by file and line number.
-- If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder:
-  - `eslint .\src\`
+1. **定期自动同步**: 在设置中启用"启用自动同步"并设置同步间隔,插件将按照设定的时间间隔自动执行同步。
+2. **失去焦点时同步**: 如果启用此选项,当Obsidian窗口失去焦点时会自动执行同步操作。
 
-## Funding URL
+这些自动同步功能都是可选的,您可以随时在设置中开启或关闭它们,以适应您的工作流程。
 
-You can include funding URLs where people who use your plugin can financially support it.
+## 支持
 
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
+如果您在使用过程中遇到任何问题或有任何建议,请在GitHub上提交issue。
 
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
-}
-```
+## 贡献
 
-If you have multiple URLs, you can also do:
+欢迎提交Pull Request来改进这个插件。
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
-}
-```
+## 许可证
 
-## API Documentation
-
-See https://github.com/obsidianmd/obsidian-api
+本插件采用MIT许可证。详情请见LICENSE文件。

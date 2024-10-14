@@ -1,85 +1,73 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, ButtonComponent } from 'obsidian';
+import * as child_process from 'child_process';
 
 // Remember to rename these classes and interfaces!
 
-interface MyPluginSettings {
-	mySetting: string;
+interface GitSyncPluginSettings {
+	gitRepoPath: string;
+	syncButtonLocation: 'ribbon' | 'statusBar';
+	autoSync: boolean;
+	autoSyncInterval: number; // 以分钟为单位
+	syncOnBlur: boolean;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+const DEFAULT_SETTINGS: GitSyncPluginSettings = {
+	gitRepoPath: '',
+	syncButtonLocation: 'ribbon',
+	autoSync: false,
+	autoSyncInterval: 30,
+	syncOnBlur: false
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class GitSyncPlugin extends Plugin {
+	settings: GitSyncPluginSettings;
+	statusBarItem: HTMLElement;
+	ribbonIconEl: HTMLElement;
+	autoSyncIntervalId: number;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+		this.addSettingTab(new GitSyncSettingTab(this.app, this));
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+		this.addSyncButton();
 
-		// This adds a simple command that can be triggered anywhere
+		// 添加命令
 		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
+			id: 'git-sync',
+			name: '执行Git同步',
+			callback: () => this.syncGit(),
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		this.setupAutoSync();
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+		if (this.settings.syncOnBlur) {
+			window.addEventListener('blur', this.onBlur.bind(this));
+		}
 	}
 
 	onunload() {
+		if (this.autoSyncIntervalId) {
+			window.clearInterval(this.autoSyncIntervalId);
+		}
+		window.removeEventListener('blur', this.onBlur.bind(this));
+	}
 
+	setupAutoSync() {
+		if (this.autoSyncIntervalId) {
+			window.clearInterval(this.autoSyncIntervalId);
+		}
+		if (this.settings.autoSync) {
+			this.autoSyncIntervalId = window.setInterval(() => {
+				this.syncGit(true);
+			}, this.settings.autoSyncInterval * 60 * 1000);
+		}
+	}
+
+	onBlur() {
+		if (this.settings.syncOnBlur) {
+			this.syncGit(true);
+		}
 	}
 
 	async loadSettings() {
@@ -88,29 +76,94 @@ export default class MyPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+		this.setupAutoSync();
+	}
+
+	addSyncButton() {
+		if (this.settings.syncButtonLocation === 'ribbon') {
+			this.ribbonIconEl = this.addRibbonIcon('sync', 'Git同步', (evt: MouseEvent) => {
+				this.syncGit();
+			});
+		} else {
+			this.statusBarItem = this.addStatusBarItem();
+			this.statusBarItem.setText('Git同步');
+			this.statusBarItem.onClickEvent(() => this.syncGit());
+		}
+	}
+
+	async syncGit(silent: boolean = false) {
+		if (!this.settings.gitRepoPath) {
+			if (!silent) new Notice('请先在设置中配置Git仓库路径');
+			return;
+		}
+
+		if (!silent) new Notice('开始检查更新...');
+
+		try {
+			const status = await this.execGitCommand('git status --porcelain');
+			const hasLocalChanges = status.trim().length > 0;
+
+			await this.execGitCommand('git fetch');
+			const diffResult = await this.execGitCommand('git diff HEAD origin/master --name-only');
+			const hasRemoteChanges = diffResult.trim().length > 0;
+
+			if (!hasLocalChanges && !hasRemoteChanges) {
+				if (!silent) new Notice('无需同步，本地与远程均无更新');
+				return;
+			}
+
+			if (!silent) new Notice('开始同步...');
+
+			if (hasLocalChanges) {
+				const now = new Date();
+				const formattedDate = now.getFullYear() + '-' + 
+									  String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+									  String(now.getDate()).padStart(2, '0') + ' ' + 
+									  String(now.getHours()).padStart(2, '0') + ':' + 
+									  String(now.getMinutes()).padStart(2, '0') + ':' + 
+									  String(now.getSeconds()).padStart(2, '0');
+				
+				await this.execGitCommand('git add .');
+				await this.execGitCommand(`git commit -m "Auto-sync: ${formattedDate}"`);
+			}
+
+			if (hasRemoteChanges) {
+				await this.execGitCommand('git pull');
+			}
+
+			if (hasLocalChanges) {
+				await this.execGitCommand('git push');
+			}
+
+			if (!silent) {
+				if (!hasLocalChanges && hasRemoteChanges) {
+					new Notice('本地无更新，已从远程拉取更新');
+				} else if (hasLocalChanges) {
+					new Notice('本地更新已同步至远程');
+				}
+			}
+		} catch (error) {
+			if (!silent) new Notice('同步失败: ' + error);
+		}
+	}
+
+	async execGitCommand(command: string): Promise<string> {
+		return new Promise((resolve, reject) => {
+			child_process.exec(command, { cwd: this.settings.gitRepoPath }, (error, stdout, stderr) => {
+				if (error) {
+					reject(error);
+				} else {
+					resolve(stdout);
+				}
+			});
+		});
 	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
+class GitSyncSettingTab extends PluginSettingTab {
+	plugin: GitSyncPlugin;
 
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: GitSyncPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -121,14 +174,68 @@ class SampleSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
+			.setName('Git仓库路径')
+			.setDesc('设置Git仓库的本地路径')
 			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+				.setPlaceholder('输入Git仓库路径')
+				.setValue(this.plugin.settings.gitRepoPath)
 				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
+					this.plugin.settings.gitRepoPath = value;
 					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('同步按钮位置')
+			.setDesc('选择同步按钮显示的位置')
+			.addDropdown(dropdown => dropdown
+				.addOption('ribbon', '左侧功能区')
+				.addOption('statusBar', '状态栏')
+				.setValue(this.plugin.settings.syncButtonLocation)
+				.onChange(async (value: 'ribbon' | 'statusBar') => {
+					this.plugin.settings.syncButtonLocation = value;
+					await this.plugin.saveSettings();
+					this.plugin.ribbonIconEl?.remove();
+					this.plugin.statusBarItem?.remove();
+					this.plugin.addSyncButton();
+				}));
+
+		new Setting(containerEl)
+			.setName('启用自动同步')
+			.setDesc('定期自动执行同步')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.autoSync)
+				.onChange(async (value) => {
+					this.plugin.settings.autoSync = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('自动同步间隔')
+			.setDesc('设置自动同步的时间间隔（分钟）')
+			.addText(text => text
+				.setPlaceholder('输入分钟数')
+				.setValue(String(this.plugin.settings.autoSyncInterval))
+				.onChange(async (value) => {
+					const interval = parseInt(value);
+					if (!isNaN(interval) && interval > 0) {
+						this.plugin.settings.autoSyncInterval = interval;
+						await this.plugin.saveSettings();
+					}
+				}));
+
+		new Setting(containerEl)
+			.setName('失去焦点时同步')
+			.setDesc('当Obsidian窗口失去焦点时执行同步')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.syncOnBlur)
+				.onChange(async (value) => {
+					this.plugin.settings.syncOnBlur = value;
+					await this.plugin.saveSettings();
+					if (value) {
+						window.addEventListener('blur', this.plugin.onBlur.bind(this.plugin));
+					} else {
+						window.removeEventListener('blur', this.plugin.onBlur.bind(this.plugin));
+					}
 				}));
 	}
 }
