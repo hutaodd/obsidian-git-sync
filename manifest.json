@@ -3,7 +3,7 @@
 	"name": "Git Sync",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "自动同步您的Obsidian仓库与Git",
+	"description": "自动同步您的仓库与Git",
 	"author": "hutaodd",
 	"authorUrl": "https://github.com/hutaodd",
 	"isDesktopOnly": true,
